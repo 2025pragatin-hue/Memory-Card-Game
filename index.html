@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D Memory Flip Game</title>
+
+<style>
+
+/* RESET */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+body {
+    height: 100vh;
+    background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: white;
+}
+
+/* SCREENS */
+.screen {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    animation: fadeIn 0.8s ease;
+}
+
+.screen.active {
+    display: flex;
+}
+
+/* GLASS CARD */
+.glass-card {
+    backdrop-filter: blur(15px);
+    background: rgba(255,255,255,0.1);
+    padding: 40px;
+    border-radius: 20px;
+    text-align: center;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+}
+
+/* BUTTON */
+button {
+    padding: 12px 25px;
+    margin-top: 20px;
+    border: none;
+    border-radius: 8px;
+    background: #00c6ff;
+    color: white;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+button:hover {
+    transform: scale(1.08);
+    background: #0072ff;
+}
+
+/* HEADER */
+.game-header {
+    width: 90%;
+    max-width: 600px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.score-box {
+    font-weight: bold;
+}
+
+/* PROGRESS BAR */
+.progress-bar {
+    width: 200px;
+    height: 10px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+#progress {
+    height: 100%;
+    width: 100%;
+    background: #00ffcc;
+    transition: width 1s linear;
+}
+
+/* GAME BOARD */
+.game-board {
+    display: grid;
+    grid-template-columns: repeat(4, 100px);
+    gap: 15px;
+    perspective: 1000px;
+}
+
+/* CARD */
+.card {
+    width: 100px;
+    height: 120px;
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 0.6s;
+    cursor: pointer;
+}
+
+.card.flip {
+    transform: rotateY(180deg);
+}
+
+.card.match {
+    box-shadow: 0 0 15px #00ffcc;
+}
+
+.card-face {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 12px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 30px;
+    backface-visibility: hidden;
+}
+
+.front {
+    background: linear-gradient(45deg, #00c6ff, #0072ff);
+}
+
+.back {
+    background: white;
+    color: black;
+    transform: rotateY(180deg);
+}
+
+/* ANIMATION */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* RESPONSIVE */
+@media (max-width: 600px) {
+    .game-board {
+        grid-template-columns: repeat(4, 70px);
+    }
+    .card {
+        width: 70px;
+        height: 90px;
+    }
+}
+
+</style>
+</head>
+
+<body>
+
+<!-- START SCREEN -->
+<section id="start-screen" class="screen active">
+    <div class="glass-card">
+        <h1>🧠 Memory Flip Challenge</h1>
+        <p>Test your memory skills!</p>
+        <button id="start-btn">Start Game</button>
+    </div>
+</section>
+
+<!-- GAME SCREEN -->
+<section id="game-screen" class="screen">
+    <header class="game-header">
+        <div class="score-box">
+            Moves: <span id="moves">0</span>
+        </div>
+
+        <div class="progress-bar">
+            <div id="progress"></div>
+        </div>
+
+        <button id="restart-btn">Restart</button>
+    </header>
+
+    <main class="game-board" id="game-board"></main>
+</section>
+
+<!-- GAME OVER SCREEN -->
+<section id="game-over-screen" class="screen">
+    <div class="glass-card">
+        <h2>🎉 Game Over!</h2>
+        <p>Total Moves: <span id="final-moves"></span></p>
+        <button onclick="restartGame()">Play Again</button>
+    </div>
+</section>
+
+<script>
+
+const symbols = ['🍎','🍌','🍒','🍇','🍉','🍍','🥝','🍓'];
+let cardsArray = [];
+let firstCard, secondCard;
+let lockBoard = false;
+let moves = 0;
+let matches = 0;
+let timeLeft = 60;
+let interval;
+
+const board = document.getElementById("game-board");
+const movesDisplay = document.getElementById("moves");
+const progressBar = document.getElementById("progress");
+
+document.getElementById("start-btn").onclick = startGame;
+document.getElementById("restart-btn").onclick = restartGame;
+
+function startGame() {
+    document.getElementById("start-screen").classList.remove("active");
+    document.getElementById("game-screen").classList.add("active");
+    resetGame();
+    startTimer();
+}
+
+function resetGame() {
+    board.innerHTML = "";
+    cardsArray = [...symbols, ...symbols].sort(() => 0.5 - Math.random());
+    moves = 0;
+    matches = 0;
+    timeLeft = 60;
+    movesDisplay.textContent = 0;
+    progressBar.style.width = "100%";
+
+    cardsArray.forEach(symbol => {
+        const card = document.createElement("div");
+        card.classList.add("card");
+        card.innerHTML = `
+            <div class="card-face front"></div>
+            <div class="card-face back">${symbol}</div>
+        `;
+        card.addEventListener("click", flipCard);
+        board.appendChild(card);
+    });
+}
+
+function flipCard() {
+    if (lockBoard || this === firstCard) return;
+
+    this.classList.add("flip");
+
+    if (!firstCard) {
+        firstCard = this;
+        return;
+    }
+
+    secondCard = this;
+    moves++;
+    movesDisplay.textContent = moves;
+    checkMatch();
+}
+
+function checkMatch() {
+    let isMatch = firstCard.innerHTML === secondCard.innerHTML;
+
+    if (isMatch) {
+        firstCard.classList.add("match");
+        secondCard.classList.add("match");
+        matches++;
+        resetTurn();
+        if (matches === symbols.length) endGame();
+    } else {
+        lockBoard = true;
+        setTimeout(() => {
+            firstCard.classList.remove("flip");
+            secondCard.classList.remove("flip");
+            resetTurn();
+        }, 800);
+    }
+}
+
+function resetTurn() {
+    [firstCard, secondCard] = [null, null];
+    lockBoard = false;
+}
+
+function startTimer() {
+    clearInterval(interval);
+    interval = setInterval(() => {
+        timeLeft--;
+        progressBar.style.width = (timeLeft / 60) * 100 + "%";
+        if (timeLeft <= 0) endGame();
+    }, 1000);
+}
+
+function endGame() {
+    clearInterval(interval);
+    document.getElementById("game-screen").classList.remove("active");
+    document.getElementById("game-over-screen").classList.add("active");
+    document.getElementById("final-moves").textContent = moves;
+}
+
+function restartGame() {
+    document.getElementById("game-over-screen").classList.remove("active");
+    document.getElementById("game-screen").classList.add("active");
+    resetGame();
+    startTimer();
+}
+
+</script>
+
+</body>
+</html>
